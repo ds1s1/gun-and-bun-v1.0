@@ -30,20 +30,6 @@ I used OpenCV for the heavy lifting, but the logic is all C++ state management. 
    - Firing Logic: I wrote a simple "Friend or Foe" logic. Right now, it acts as a placeholder that simulates checking biometric data (like gait analysis or voice prints). If the logic returns "Hostile," the system logs a firing sequence to the console.
    - Safety: If the person leaves the frame or the logic decides they are friendly, the system automatically stands down and stops tracking.
 
-### Project Structure
-
-You need to keep the files organized exactly like this, or the code will crash because it won't find the model file.
-
-Gun-and-Bun/
-|
-|-- src/
-|   |-- gun_and_bun.cpp                 (The main C++ source code)
-|
-|-- models/
-|   |-- haarcascade_frontalface_default.xml   (The brain for face detection. Don't move this.)
-|
-|-- README.txt                          (This file)
-
 ### Prerequisites
 
 To run this, you need a few things installed on your machine:
