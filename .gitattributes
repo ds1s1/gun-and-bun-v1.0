@@ -1,2 +1,39 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# --- Executables & Builds ---
+*.exe
+*.o
+*.obj
+*.out
+*.app
+
+# --- Heavy Libraries (DLLs) ---
+# Don't upload these, the user downloads/has them locally
+*.dll
+*.lib
+*.a
+*.so
+*.dylib
+
+# --- AI Models & Assets ---
+# These are too big for Git, the Launcher handles them
+models/
+*.weights
+*.pt
+*.onnx
+# Note: Keep XML if you want, but usually better to download them
+*.xml
+
+# --- IDE & System Files ---
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
+
+# --- Release Folders ---
+# Ignore the setup folders you create for users
+Gun-and-Bun-Setup/
+Release/
+Debug/
+bin/
+build/
+x64/

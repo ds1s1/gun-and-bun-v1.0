@@ -1,126 +1,176 @@
 #include <iostream>
-#include <string>
 #include <vector>
+#include <string>
+#include <ctime>
 #include <thread>
-#include <chrono>
+#include <cstdlib>
+#include <sstream>
 #include <opencv2/opencv.hpp>
 #include <opencv2/objdetect.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
-class WeaponSystem {
+using namespace cv;
+using namespace std;
+
+class VoiceAssistant {
 public:
-    void lockTarget(int x, int y) {
-        std::cout << "\033[1;33m[GUN]: Locking on Target at (" << x << ", " << y << ")...\033[0m\n";
+    void speak(string text) {
+        thread t([text]() {
+            #ifdef _WIN32
+                string cmd = "mshta vbscript:Execute(\"CreateObject(\"\"SAPI.SpVoice\"\").Speak(\"\"" + text + "\"\")(window.close)\")";
+                system(cmd.c_str());
+            #else
+                string cmd = "espeak \"" + text + "\"";
+                system(cmd.c_str());
+            #endif
+        });
+        t.detach();
     }
 
-    void fire() {
-        std::cout << "\033[1;31m[GUN]: !!! FIRING SEQUENCE INITIATED !!! \033[0m\n";
-        std::cout << "\033[1;31m[GUN]: BANG! BANG! BANG! \033[0m\n";
-        std::this_thread::sleep_for(std::chrono::milliseconds(500)); 
+    void tellTime() {
+        time_t now = time(0);
+        tm *ltm = localtime(&now);
+        stringstream ss;
+        ss << "The time is " << ltm->tm_hour << " " << ltm->tm_min;
+        speak(ss.str());
     }
-    
-    void standDown() {
-        std::cout << "\033[1;32m[GUN]: Target Safe. Holding Fire.\033[0m\n";
+
+    void tellWeather() {
+        int temp = 20 + (rand() % 16); 
+        speak("Current temperature is " + to_string(temp) + " degrees celsius");
+    }
+
+    void reportStatus(int threats) {
+        if (threats == 0) speak("System is secure. No threats detected.");
+        else speak("Warning. " + to_string(threats) + " hostile targets detected.");
     }
 };
 
-class BiometricScanner {
+Point mouseClickPoint(-1, -1);
+bool mouseClicked = false;
+
+void onMouse(int event, int x, int y, int flags, void* userdata) {
+    if (event == EVENT_LBUTTONDOWN) {
+        mouseClickPoint = Point(x, y);
+        mouseClicked = true;
+    }
+}
+
+class VisualEffects {
 private:
-    cv::HOGDescriptor bodyDetector;
-    cv::CascadeClassifier faceDetector;
-
+    int scanLineY;
 public:
-    BiometricScanner() {
-        bodyDetector.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());
-        if (!faceDetector.load("models/haarcascade_frontalface_default.xml")) {
-            std::cerr << "[ERROR]: Face XML not found.\n";
-        }
+    VisualEffects() : scanLineY(0) {}
+
+    void drawScanner(Mat& frame) {
+        scanLineY += 5;
+        if (scanLineY > frame.rows) scanLineY = 0;
+        line(frame, Point(0, scanLineY), Point(frame.cols, scanLineY), Scalar(0, 255, 0), 2);
     }
 
-    bool analyzeGait(const cv::Rect& body) {
-        return true; 
+    void drawReticle(Mat& frame, Rect r, Scalar color, string label) {
+        rectangle(frame, r, color, 1);
+        int len = 20;
+        line(frame, r.tl(), Point(r.x + len, r.y), color, 3);
+        line(frame, r.tl(), Point(r.x, r.y + len), color, 3);
+        line(frame, r.br(), Point(r.x + r.width - len, r.y + r.height), color, 3);
+        line(frame, r.br(), Point(r.x + r.width, r.y + r.height - len), color, 3);
+        putText(frame, label, Point(r.x, r.y - 10), FONT_HERSHEY_SIMPLEX, 0.6, color, 2);
     }
 
-    bool analyzeVoiceSignature() {
-        return false; 
-    }
+    void drawUI(Mat& frame, int threatCount) {
+        int h = frame.rows;
+        rectangle(frame, Rect(0, h-40, frame.cols, 40), Scalar(0,0,0), FILLED);
+        string msg = "[T] TIME  |  [W] WEATHER  |  [S] STATUS REPORT";
+        putText(frame, msg, Point(20, h-15), FONT_HERSHEY_PLAIN, 1.0, Scalar(255, 255, 255), 1);
 
-    bool isStranger(const cv::Mat& faceROI) {
-        return true; 
-    }
-
-    void scanFrame(cv::Mat& frame, WeaponSystem& weapon) {
-        std::vector<cv::Rect> foundBodies;
-        std::vector<cv::Rect> foundFaces;
-        
-        bodyDetector.detectMultiScale(frame, foundBodies, 0, cv::Size(8, 8), cv::Size(32, 32), 1.05, 2);
-
-        cv::Mat gray;
-        cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
-        faceDetector.detectMultiScale(gray, foundFaces, 1.1, 5);
-
-        bool threatDetected = false;
-        int targetX = 0, targetY = 0;
-
-        for (const auto& body : foundBodies) {
-            cv::rectangle(frame, body, cv::Scalar(255, 0, 0), 2);
-            if (analyzeGait(body)) {
-                cv::putText(frame, "[BUN]: Suspicious Movement", cv::Point(body.x, body.y - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 2);
-            }
-        }
-
-        for (const auto& face : foundFaces) {
-            targetX = face.x + face.width / 2;
-            targetY = face.y + face.height / 2;
-            
-            cv::rectangle(frame, face, cv::Scalar(0, 0, 255), 2);
-
-            bool isFaceStranger = isStranger(frame(face));
-            bool isVoiceStranger = !analyzeVoiceSignature();
-
-            if (isFaceStranger && isVoiceStranger) {
-                threatDetected = true;
-                cv::putText(frame, "TARGET: HOSTILE", cv::Point(face.x, face.y - 30), cv::FONT_HERSHEY_BOLD, 0.8, cv::Scalar(0, 0, 255), 2);
-            } else {
-                cv::putText(frame, "TARGET: FRIENDLY", cv::Point(face.x, face.y - 30), cv::FONT_HERSHEY_BOLD, 0.8, cv::Scalar(0, 255, 0), 2);
-            }
-        }
-
-        if (threatDetected) {
-            weapon.lockTarget(targetX, targetY);
-            weapon.fire();
-            cv::putText(frame, "!!! GUN ACTIVATED !!!", cv::Point(50, 50), cv::FONT_HERSHEY_DUPLEX, 1.5, cv::Scalar(0, 0, 255), 3);
-        } else if (!foundFaces.empty()) {
-            weapon.standDown();
+        if (threatCount > 0) {
+            putText(frame, "THREATS: " + to_string(threatCount), Point(frame.cols - 150, h-15), FONT_HERSHEY_BOLD, 1.0, Scalar(0, 0, 255), 2);
+        } else {
+             putText(frame, "ALL CLEAR", Point(frame.cols - 120, h-15), FONT_HERSHEY_BOLD, 1.0, Scalar(0, 255, 0), 2);
         }
     }
 };
 
 int main() {
-    std::cout << "=================================\n";
-    std::cout << "   GUN AND BUN: SYSTEM ONLINE    \n";
-    std::cout << "=================================\n";
-    
-    cv::VideoCapture cap(0);
-    if (!cap.isOpened()) {
-        std::cerr << "Error: Cannot open camera.\n";
+    VideoCapture cap(0);
+    if (!cap.isOpened()) return -1;
+
+    CascadeClassifier faceDetector;
+    if (!faceDetector.load("models/haarcascade_frontalface_default.xml")) {
+        cerr << "Error: Model not found.\n";
         return -1;
     }
 
-    WeaponSystem turret;
-    BiometricScanner scanner;
-    cv::Mat frame;
+    VisualEffects vfx;
+    VoiceAssistant jarvis;
+    Mat frame;
+    
+    namedWindow("Gun and Bun v5.0", WINDOW_AUTOSIZE);
+    setMouseCallback("Gun and Bun v5.0", onMouse, NULL);
+
+    vector<int> friendlyIDs;
+    jarvis.speak("System Online.");
 
     while (true) {
         cap >> frame;
         if (frame.empty()) break;
+        flip(frame, frame, 1); 
 
-        scanner.scanFrame(frame, turret);
-        cv::imshow("Gun and Bun UI", frame);
+        vector<Rect> faces;
+        Mat gray;
+        cvtColor(frame, gray, COLOR_BGR2GRAY);
+        faceDetector.detectMultiScale(gray, faces, 1.1, 5, 0, Size(30, 30));
 
-        if (cv::waitKey(30) == 27) break;
+        vfx.drawScanner(frame);
+
+        int currentThreats = 0;
+        
+        for (size_t i = 0; i < faces.size(); i++) {
+            Rect r = faces[i];
+            int approxID = (r.x / 10) + (r.y / 10); 
+            bool isFriendly = false;
+
+            for (int id : friendlyIDs) {
+                if (abs(id - approxID) < 5) isFriendly = true; 
+            }
+
+            if (mouseClicked && r.contains(mouseClickPoint)) {
+                if (isFriendly) {
+                     for (auto it = friendlyIDs.begin(); it != friendlyIDs.end(); ) {
+                        if (abs(*it - approxID) < 5) it = friendlyIDs.erase(it);
+                        else ++it;
+                    }
+                    isFriendly = false;
+                    jarvis.speak("Target Hostile.");
+                } else {
+                    friendlyIDs.push_back(approxID);
+                    isFriendly = true;
+                    jarvis.speak("Target Authorized.");
+                }
+                mouseClicked = false; 
+            }
+
+            Scalar color = isFriendly ? Scalar(0, 255, 0) : Scalar(0, 0, 255);
+            string label = isFriendly ? "FRIEND" : "HOSTILE";
+            if (!isFriendly) currentThreats++;
+
+            vfx.drawReticle(frame, r, color, label);
+        }
+        mouseClicked = false; 
+
+        vfx.drawUI(frame, currentThreats);
+
+        imshow("Gun and Bun v5.0", frame);
+        
+        char key = (char)waitKey(30);
+        if (key == 27) break; 
+        if (key == 't' || key == 'T') jarvis.tellTime();
+        if (key == 'w' || key == 'W') jarvis.tellWeather();
+        if (key == 's' || key == 'S') jarvis.reportStatus(currentThreats);
     }
-
+    
+    jarvis.speak("System shutting down.");
     return 0;
 }
